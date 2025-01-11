@@ -1,12 +1,19 @@
 package com.springsecurity.security.config;
 
+import com.springsecurity.security.MyUserDetailsService;
+import com.springsecurity.security.entity.Authorities;
+import com.springsecurity.security.entity.Users;
 import com.springsecurity.security.jwt.AuthEntryPointJwt;
 import com.springsecurity.security.jwt.AuthTokenFilter;
+import com.springsecurity.security.repo.AuthoritiesRepo;
+import com.springsecurity.security.repo.UsersRepo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -35,10 +42,22 @@ public class SecurityConfig {
     @Autowired
     private AuthEntryPointJwt unauthorizedHandler;
 
-    @Bean
-    public AuthTokenFilter authenticationJwtTokenFilter(){
-        return new AuthTokenFilter();
+
+    private AuthTokenFilter authTokenFilter;
+
+    @Autowired
+    public SecurityConfig(AuthTokenFilter authTokenFilter){
+        this.authTokenFilter = authTokenFilter;
     }
+
+    @Autowired
+    private MyUserDetailsService userDetailsService;
+
+    @Autowired
+    private AuthoritiesRepo authoritiesRepo;
+
+    @Autowired
+    private UsersRepo usersRepo;
 
 
     @Bean
@@ -54,7 +73,7 @@ public class SecurityConfig {
         http.exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler));
         http.headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin));
         http.csrf(csrf->csrf.disable());
-        http.addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(authTokenFilter, UsernamePasswordAuthenticationFilter.class);
         return (SecurityFilterChain)http.build();
     }
 
@@ -64,24 +83,40 @@ public class SecurityConfig {
     }
 
     @Bean
-    public CommandLineRunner initData(UserDetailsService userDetailsService) {
+    public CommandLineRunner initData(){
         return args -> {
-            JdbcUserDetailsManager manager = (JdbcUserDetailsManager) userDetailsService;
-            UserDetails user1 = User.withUsername("user1")
-                    .password(passwordEncoder().encode("password1"))
-                    .roles("USER")
-                    .build();
-            UserDetails admin = User.withUsername("admin")
-                    //.password(passwordEncoder().encode("adminPass"))
-                    .password(passwordEncoder().encode("adminPass"))
-                    .roles("ADMIN")
-                    .build();
-
-            JdbcUserDetailsManager userDetailsManager = new JdbcUserDetailsManager(dataSource);
-            userDetailsManager.createUser(user1);
-            userDetailsManager.createUser(admin);
+            Users users = new Users();
+            users.setUsername("mounesh");
+            users.setPassword(passwordEncoder().encode("mounesh"));
+            users.setEnabled(true);
+            usersRepo.save(users);
+            Authorities authorities = new Authorities();
+            authorities.setAuthority("USER");
+            authorities.setUser(users);
+            authoritiesRepo.save(authorities);
+            usersRepo.save(users);
         };
     }
+
+//    @Bean
+//    public CommandLineRunner initData(UserDetailsService userDetailsService) {
+//        return args -> {
+//            JdbcUserDetailsManager manager = (JdbcUserDetailsManager) userDetailsService;
+//            UserDetails user1 = User.withUsername("user1")
+//                    .password(passwordEncoder().encode("password1"))
+//                    .roles("USER")
+//                    .build();
+//            UserDetails admin = User.withUsername("admin")
+//                    //.password(passwordEncoder().encode("adminPass"))
+//                    .password(passwordEncoder().encode("adminPass"))
+//                    .roles("ADMIN")
+//                    .build();
+//
+//            JdbcUserDetailsManager userDetailsManager = new JdbcUserDetailsManager(dataSource);
+//            userDetailsManager.createUser(user1);
+//            userDetailsManager.createUser(admin);
+//        };
+//    }
 
     //below is the in memory
 //    @Bean
@@ -116,6 +151,17 @@ public class SecurityConfig {
 //        jdbcUserDetailsManager.createUser(user2);
 //        return jdbcUserDetailsManager;
 //    }
+
+
+     @Bean
+     public AuthenticationProvider authenticationProvider(){
+         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+         provider.setPasswordEncoder(passwordEncoder());
+         provider.setUserDetailsService(userDetailsService);
+         return provider;
+     }
+
+
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration builder) throws Exception {
